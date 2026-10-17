@@ -325,6 +325,7 @@
                     items.splice(i, 1);
                     invincibleTimer = 300;
                     score += 50;
+                    if (score > highScore) highScore = score;
                 } else if (items[i] && items[i].x + items[i].width < 0) {
                     items.splice(i, 1);
                 }
@@ -345,8 +346,10 @@
                     currentBunnyY + currentBunnyH > obstacles[i].y + 4
                 ) {
                     if (invincibleTimer > 0) {
+                        // 修正：無敵狀態撞飛障礙物時確實增加分數並更新最高分
                         obstacles.splice(i, 1);
                         score += 20;
+                        if (score > highScore) highScore = score;
                     } else {
                         isGameOver = true;
                     }
@@ -451,7 +454,7 @@
         });
 
         window.addEventListener("keyup", function (e) {
-            if (e.code === "ArrowDown" || e.code === "KeyS") {
+            if (e.code === "ArrowDown" /***************************/ || e.code === "KeyS") {
                 bunny.isDucking = false;
             }
         });
