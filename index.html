@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>兔子跑酷</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #f0f4f8;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 5px;
+        }
+        p {
+            color: #666;
+            margin-top: 0;
+            margin-bottom: 15px;
+        }
+        canvas {
+            background: #ffffff;
+            border: 4px solid #cbd5e1;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+            cursor: pointer;
+        }
+        .instructions {
+            margin-top: 15px;
+            font-size: 14px;
+            color: #475569;
+            background: #e2e8f0;
+            padding: 10px 20px;
+            border-radius: 20px;
+            text-align: center;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🐰 兔子跑酷</h1>
+    <p>躲避障礙物，吃金黃星星觸發彩虹無敵狀態撞飛一切！</p>
+
+    <canvas id="gameCanvas" width="800" height="300"></canvas>
+    
+    <div class="instructions">
+        🎮 <b>操作方式</b>：<br>
+        【空白鍵 Space / 向上箭頭 ↑】跳躍（躲避紅蘿蔔）<br>
+        【向下箭頭 ↓ / S 鍵】按住下蹲（躲避飛鳥）<br>
+        ⭐ <b>特色機制</b>：吃到金黃星星可進入<b>彩虹無敵狀態</b>！
+    </div>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+
+        // 遊戲變數
+        let score = 0;
+        let highScore = 0;
+        let gameSpeed = 5;
+        let isGameOver = false;
+        let isGameStarted = false;
+
+        // 彩虹無敵狀態變數
+        let invincibleTimer = 0;
+        let rainbowHue = 0;
+
+        // 兔子物件
+        const bunny = {
+            x: 80,
+            normalY: 200,
+            duckY: 225,
+            y: 200,
+            normalWidth: 45,
+            normalHeight: 50,
+            duckWidth: 55,
+            duckHeight: 25,
+            width: 45,
+            height: 50,
+            vy: 0,
+            gravity: 0.6,
+            jumpPower: -11,
+            isJumping: false,
+            isDucking: false,
+            draw() {
+                rainbowHue = (rainbowHue + 12) % 360;
+                let bodyColor = invincibleTimer > 0 ? `hsl(${rainbowHue}, 90%, 75%)` : "#f8fafc";
+                let strokeColor = invincibleTimer > 0 ? `hsl(${rainbowHue}, 100%, 40%)` : "#334155";
+
+                ctx.fillStyle = bodyColor;
+                ctx.strokeStyle = strokeColor;
+                ctx.lineWidth = 3;
+
+                if (invincibleTimer > 0) {
+                    ctx.shadowColor = `hsl(${rainbowHue}, 100%, 50%)`;
+                    ctx.shadowBlur = 15;
+                } else {
+                    ctx.shadowBlur = 0;
+                }
+
+                if (this.isDucking && !this.isJumping) {
+                    ctx.beginPath();
+                    ctx.ellipse(this.x + 27, this.y + 15, 25, 10, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+
+                    ctx.beginPath();
+                    ctx.arc(this.x + 45, this.y + 10, 11, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+
+                    ctx.beginPath();
+                    ctx.ellipse(this.x + 25, this.y + 3, 14, 4, -0.1, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+
+                    ctx.fillStyle = "#0f172a";
+                    ctx.beginPath();
+                    ctx.arc(this.x + 48, this.y + 8, 2, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    ctx.beginPath();
+                    ctx.ellipse(this.x + 22, this.y + 28, 18, 20, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+
+                    ctx.beginPath();
+                    ctx.arc(this.x + 22, this.y + 15, 14, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+
+                    ctx.beginPath();
+                    ctx.ellipse(this.x + 15, this.y - 8, 4, 12, -0.2, 0, Math.PI * 2);
+                    ctx.ellipse(this.x + 29, this.y - 8, 4, 12, 0.2, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+
+                    ctx.fillStyle = "#0f172a";
+                    ctx.beginPath();
+                    ctx.arc(this.x + 26, this.y + 13, 2.5, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    ctx.fillStyle = "#f43f5e";
+                    ctx.beginPath();
+                    ctx.arc(this.x + 30, this.y + 17, 1.5, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                ctx.shadowBlur = 0;
+            },
+            update() {
+                if (this.isDucking && !this.isJumping) {
+                    this.height = this.duckHeight;
+                    this.width = this.duckWidth;
+                    this.y = this.duckY;
+                } else {
+                    this.height = this.normalHeight;
+                    this.width = this.normalWidth;
+                }
+
+                this.vy += this.gravity;
+                this.y += this.vy;
+
+                let groundY = this.isDucking ? this.duckY : this.normalY;
+                if (this.y > groundY) {
+                    this.y = groundY;
+                    this.vy = 0;
+                    this.isJumping = false;
+                }
+            },
+            jump() {
+                if (!this.isJumping && !this.isDucking) {
+                    this.vy = this.jumpPower;
+                    this.isJumping = true;
+                }
+            }
+        };
+
+        let obstacles = [];
+        let items = [];
+
+        class Obstacle {
+            constructor(type) {
+                this.type = type; 
+                if (this.type === 'carrot') {
+                    this.width = 25;
+                    this.height = 40;
+                    this.x = canvas.width;
+                    this.y = 250 - this.height;
+                } else if (this.type === 'bird') {
+                    this.width = 40;
+                    this.height = 25;
+                    this.x = canvas.width;
+                    this.y = 195;
+                    this.wingAngle = 0;
+                }
+            }
+            draw() {
+                if (this.type === 'carrot') {
+                    ctx.fillStyle = "#ea580c";
+                    ctx.beginPath();
+                    ctx.moveTo(this.x + 5, this.y + 10);
+                    ctx.lineTo(this.x + 20, this.y + 10);
+                    ctx.lineTo(this.x + 12.5, this.y + 40);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.strokeStyle = "#7c2d12";
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+
+                    ctx.fillStyle = "#16a34a";
+                    ctx.beginPath();
+                    ctx.moveTo(this.x + 12.5, this.y + 10);
+                    ctx.lineTo(this.x + 5, this.y);
+                    ctx.lineTo(this.x + 12.5, this.y + 5);
+                    ctx.lineTo(this.x + 20, this.y);
+                    ctx.closePath();
+                    ctx.fill();
+                } else if (this.type === 'bird') {
+                    ctx.fillStyle = "#6366f1";
+                    ctx.strokeStyle = "#312e81";
+                    ctx.lineWidth = 2;
+
+                    ctx.beginPath();
+                    ctx.ellipse(this.x + 20, this.y + 12, 15, 8, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+
+                    ctx.fillStyle = "#f59e0b";
+                    ctx.beginPath();
+                    ctx.moveTo(this.x + 5, this.y + 10);
+                    ctx.lineTo(this.x, this.y + 13);
+                    ctx.lineTo(this.x + 5, this.y + 16);
+                    ctx.closePath();
+                    ctx.fill();
+
+                    this.wingAngle += 0.2;
+                    let wingY = Math.sin(this.wingAngle) * 8;
+                    ctx.fillStyle = "#818cf8";
+                    ctx.beginPath();
+                    ctx.moveTo(this.x + 20, this.y + 10);
+                    ctx.lineTo(this.x + 28, this.y - 5 + wingY);
+                    ctx.lineTo(this.x + 12, this.y + 10);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+                }
+            }
+            update() {
+                this.x -= gameSpeed;
+            }
+        }
+
+        class GoldenCarrot {
+            constructor() {
+                this.width = 30;
+                this.height = 30;
+                this.x = canvas.width;
+                this.y = Math.random() < 0.5 ? 150 : 200;
+                this.sparkle = 0;
+            }
+            draw() {
+                this.sparkle += 0.1;
+                let glow = Math.sin(this.sparkle) * 10 + 15;
+
+                ctx.shadowColor = "#f59e0b";
+                ctx.shadowBlur = glow;
+
+                ctx.fillStyle = "#fbbf24";
+                ctx.beginPath();
+                ctx.arc(this.x + 15, this.y + 15, 12, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = "#ffffff";
+                ctx.font = "bold 16px sans-serif";
+                ctx.fillText("⭐", this.x + 6, this.y + 21);
+
+                ctx.shadowBlur = 0;
+            }
+            update() {
+                this.x -= gameSpeed;
+            }
+        }
+
+        let obstacleTimer = 0;
+        let itemTimer = 0;
+        let nextObstacleInterval = 100;
+
+        function handleGameObjects() {
+            obstacleTimer++;
+            if (obstacleTimer >= nextObstacleInterval) {
+                let type = Math.random() < 0.6 ? 'carrot' : 'bird';
+                obstacles.push(new Obstacle(type));
+                obstacleTimer = 0;
+                nextObstacleInterval = Math.floor(Math.random() * 40) + 70;
+            }
+
+            itemTimer++;
+            if (itemTimer > 500) {
+                if (Math.random() < 0.5) {
+                    items.push(new GoldenCarrot());
+                    itemTimer = 0;
+                }
+            }
+
+            for (let i = items.length - 1; i >= 0; i--) {
+                items[i].update();
+                items[i].draw();
+
+                if (
+                    bunny.x < items[i].x + items[i].width &&
+                    bunny.x + bunny.width > items[i].x &&
+                    bunny.y < items[i].y + items[i].height &&
+                    bunny.y + bunny.height > items[i].y
+                ) {
+                    items.splice(i, 1);
+                    invincibleTimer = 300;
+                    score += 50;
+                } else if (items[i] && items[i].x + items[i].width < 0) {
+                    items.splice(i, 1);
+                }
+            }
+
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                obstacles[i].update();
+                obstacles[i].draw();
+
+                let currentBunnyY = bunny.isDucking && !bunny.isJumping ? bunny.duckY : bunny.y;
+                let currentBunnyH = bunny.isDucking && !bunny.isJumping ? bunny.duckHeight : bunny.height;
+                let currentBunnyW = bunny.isDucking && !bunny.isJumping ? bunny.duckWidth : bunny.width;
+
+                if (
+                    bunny.x < obstacles[i].x + obstacles[i].width - 6 &&
+                    bunny.x + currentBunnyW - 6 > obstacles[i].x &&
+                    currentBunnyY < obstacles[i].y + obstacles[i].height - 4 &&
+                    currentBunnyY + currentBunnyH > obstacles[i].y + 4
+                ) {
+                    if (invincibleTimer > 0) {
+                        obstacles.splice(i, 1);
+                        score += 20;
+                    } else {
+                        isGameOver = true;
+                    }
+                } else if (obstacles[i] && obstacles[i].x + obstacles[i].width < 0) {
+                    obstacles.splice(i, 1);
+                    score += 10;
+                    if (score > highScore) highScore = score;
+                }
+            }
+        }
+
+        function drawGround() {
+            ctx.strokeStyle = "#64748b";
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(0, 250);
+            ctx.lineTo(canvas.width, 250);
+            ctx.stroke();
+        }
+
+        function drawUI() {
+            ctx.fillStyle = "#334155";
+            ctx.font = "bold 18px 'Segoe UI'";
+            ctx.fillText("分數: " + score, 20, 35);
+            ctx.fillText("最高分: " + highScore, 20, 60);
+
+            if (invincibleTimer > 0) {
+                invincibleTimer--;
+                ctx.fillStyle = `hsl(${rainbowHue}, 100%, 45%)`;
+                ctx.font = "bold 20px 'Segoe UI'";
+                ctx.fillText("🌈 彩虹無敵衝刺中！", canvas.width - 220, 35);
+            }
+        }
+
+        function resetGame() {
+            score = 0;
+            obstacles = [];
+            items = [];
+            gameSpeed = 5;
+            isGameOver = false;
+            invincibleTimer = 0;
+            bunny.y = 200;
+            bunny.vy = 0;
+            bunny.isJumping = false;
+            bunny.isDucking = false;
+            obstacleTimer = 0;
+            itemTimer = 0;
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            drawGround();
+
+            if (!isGameStarted) {
+                ctx.fillStyle = "#334155";
+                ctx.font = "bold 24px 'Segoe UI'";
+                ctx.textAlign = "center";
+                ctx.fillText("按【空白鍵】或【點擊畫面】開始遊戲", canvas.width / 2, canvas.height / 2);
+                ctx.textAlign = "left";
+            } else if (!isGameOver) {
+                bunny.update();
+                bunny.draw();
+                handleGameObjects();
+                drawUI();
+
+                gameSpeed = 5 + Math.floor(score / 70);
+            } else {
+                ctx.fillStyle = "rgba(15, 23, 42, 0.75)";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                ctx.fillStyle = "#ffffff";
+                ctx.font = "bold 32px 'Segoe UI'";
+                ctx.textAlign = "center";
+                ctx.fillText("遊戲結束 (Game Over)", canvas.width / 2, canvas.height / 2 - 20);
+                
+                ctx.font = "18px 'Segoe UI'";
+                ctx.fillText("按【空白鍵】或【點擊畫面】重新開始", canvas.width / 2, canvas.height / 2 + 25);
+                ctx.textAlign = "left";
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        window.addEventListener("keydown", function (e) {
+            if (e.code === "Space" || e.code === "ArrowUp") {
+                e.preventDefault();
+                if (!isGameStarted) {
+                    isGameStarted = true;
+                } else if (isGameOver) {
+                    resetGame();
+                } else {
+                    bunny.jump();
+                }
+            }
+            if (e.code === "ArrowDown" || e.code === "KeyS") {
+                e.preventDefault();
+                if (isGameStarted && !isGameOver) {
+                    bunny.isDucking = true;
+                }
+            }
+        });
+
+        window.addEventListener("keyup", function (e) {
+            if (e.code === "ArrowDown" || e.code === "KeyS") {
+                bunny.isDucking = false;
+            }
+        });
+
+        canvas.addEventListener("click", function () {
+            if (!isGameStarted) {
+                isGameStarted = true;
+            } else if (isGameOver) {
+                resetGame();
+            } else {
+                bunny.jump();
+            }
+        });
+
+        animate();
+    </script>
+</body>
+</html>
